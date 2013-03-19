@@ -1,10 +1,22 @@
 /*
 ARJFUZZ - URL Fuzzer dictionnary based, multiple thread based.
 
-Uses 10 thread to scan website (NUM_THREADS_MAX)
-Uses 3 transversals (TRANSVERSALS_MAX)
+Uses 10 threads to scan website (NUM_THREADS_MAX)
+Uses 3 transversals (TRANSVERSALS_MAX) - can be set from command line. Recommends one to start with...
 
-v0.1 - G
+v0.1 - G - Original : 18.03.2013
+v0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
+
+How to use :
+
+make
+make install
+Add word into dictionnary       -w word
+Add file into dictionnary       -f file
+Scan                            -u url [-t <number of transversals> -o <false-positive-string>]
+                                -u https://www.testserver.com
+                                -u https://www.testserver.com -t 3
+                                -u https://www.testserver.com -t 3 -o Home
 
 */
 
@@ -129,7 +141,7 @@ openhttp (char *url)
       if (res != CURLE_OK)
 	fprintf (stderr, "curl_easy_perform() failed: %s\n",
 		 curl_easy_strerror (res));
-
+	
       /* always cleanup */
       curl_easy_cleanup (curl);
     }
@@ -223,6 +235,7 @@ run_thread (void *threadarg)
 
 	      pthread_mutex_lock (&mutexsum);
 	      msg = openhttp (fullurl);
+		if(msg==0) pthread_exit ((void *) threadarg);
 	      pthread_mutex_unlock (&mutexsum);
 
 	if(positive!=NULL) {
