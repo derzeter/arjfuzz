@@ -4,6 +4,8 @@ ARJFUZZ - URL Fuzzer dictionnary based, multiple thread based.
 Uses 10 thread to scan website (NUM_THREADS_MAX)
 Uses 3 transversals (TRANSVERSALS_MAX)
 
+v0.1 - G
+
 */
 
 #include <stdio.h>
@@ -29,7 +31,7 @@ int maxcount = 0;
 char *url;
 
 /* positive */
-char *positive;
+char *positive=NULL;
 
 
 /* threads information data */
@@ -119,8 +121,9 @@ openhttp (char *url)
       curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
       curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &output);
       curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, 1L);
-
-      /* Perform the request, res will get the return code */
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);    
+  /* Perform the request, res will get the return code */
       res = curl_easy_perform (curl);
       /* Check for errors */
       if (res != CURLE_OK)
@@ -164,18 +167,22 @@ run_thread (void *threadarg)
 
 /* lock things */
 
-
       bzero (local_positive, 255);
-      strncpy (local_positive, positive, strlen (positive));
+	if(positive!=NULL) {
+      		strncpy (local_positive, positive, strlen (positive));
+	}
 
+          pthread_mutex_lock (&mutexsum);
       indext[0]++;
+	  pthread_mutex_unlock (&mutexsum);
+
 
       if (tmpindex[transversals - 1] > maxcount);
       else
 	{
 
-
 	  pthread_mutex_lock (&mutexsum);
+
 	  for (i = 0; i < transversals; i++)
 	    {
 	      if (indext[i] > (maxcount))
@@ -218,9 +225,15 @@ run_thread (void *threadarg)
 	      msg = openhttp (fullurl);
 	      pthread_mutex_unlock (&mutexsum);
 
-	      if (strstr (msg, positive) == NULL
+	if(positive!=NULL) {
+	      if (strstr (msg, local_positive) == NULL
 		  && strstr (msg, "404") == NULL)
 		printf ("%d : positive (%s)\n", taskid, fullurl);
+	}
+	else{
+		if(strstr (msg, "404") == NULL)
+                printf ("%d : positive (%s)\n", taskid, fullurl);
+	}
 
 	      free (msg);
 

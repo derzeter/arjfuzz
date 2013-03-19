@@ -1,6 +1,18 @@
 images
+imgs
 logs
+logos
+css
 admin
+wp-admin
+bo
+backoffice
 csv
-sql
+logs
+sqllog
+sql-logs
+manager
+management
+jlogin
+cpanel
 
