@@ -6,6 +6,7 @@ Uses 3 transversals (TRANSVERSALS_MAX) - can be set from command line. Recommend
 
 v0.1 - G - Original : 18.03.2013
 v0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
+v0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
 
 How to use :
 
@@ -64,6 +65,7 @@ struct BufferStruct
 struct thread_data thread_data_array[NUM_THREADS_MAX];
 /* lock system */
 pthread_mutex_t mutexsum;
+pthread_mutex_t mutexsum1;
 
 
 /* get word from dictionarry */
@@ -144,6 +146,7 @@ openhttp (char *url)
 	
       /* always cleanup */
       curl_easy_cleanup (curl);
+
     }
 
   if (res != CURLE_OK)
@@ -157,22 +160,18 @@ void *
 run_thread (void *threadarg)
 {
   CURLcode code;
-  int taskid, i;
+  int taskid, i, local_maxcount,local_transversals;
   int tmpindex[transversals];
-  char fullurl[255];
+  char fullurl[255],local_url[255];
   char local_positive[255];
   char *msg;
 
   struct thread_data *my_data;
-  my_data = (struct thread_data *) threadarg;
 
 /* more argument passing will be needed */
   my_data = (struct thread_data *) threadarg;
   taskid = my_data->thread_id;
-
 /* busy work */
-
-
 
   do
     {
@@ -180,43 +179,44 @@ run_thread (void *threadarg)
 /* lock things */
 
       bzero (local_positive, 255);
+      bzero (local_url, 255);
+
+        pthread_mutex_lock (&mutexsum);						// LOCK 1
+        bzero (local_url, 255);
+	strncpy(local_url,url,strlen(url));
+	local_maxcount = maxcount;
+	local_transversals = transversals;
+
 	if(positive!=NULL) {
       		strncpy (local_positive, positive, strlen (positive));
-	}
+	} 
+          indext[0]++;
 
-          pthread_mutex_lock (&mutexsum);
-      indext[0]++;
-	  pthread_mutex_unlock (&mutexsum);
+	  pthread_mutex_unlock (&mutexsum); 					// UNLOCK 1
 
-
-      if (tmpindex[transversals - 1] > maxcount);
+      if (tmpindex[local_transversals - 1] > local_maxcount);
       else
 	{
 
-	  pthread_mutex_lock (&mutexsum);
+		pthread_mutex_lock (&mutexsum);					// LOCK 2
 
-	  for (i = 0; i < transversals; i++)
+	  for (i = 0; i < local_transversals; i++)
 	    {
-	      if (indext[i] > (maxcount))
-		if ((i + 1) < transversals)
+	      if (indext[i] > (local_maxcount))
+		if ((i + 1) < local_transversals)
 		  {
 		    indext[i + 1]++;
 		    indext[i] = 0;
 		  }
-	    }
-	  pthread_mutex_unlock (&mutexsum);
-
-	  for (i = 0; i < transversals; i++)
-	    {
-	      tmpindex[i] = indext[i];
+		tmpindex[i] = indext[i];
 	    }
 
-/* unlock things */
+		pthread_mutex_unlock (&mutexsum);				// UNLOCK 2
 
 	  bzero (fullurl, 255);
-	  strncat (fullurl, url, strlen (url));
-
-	  for (i = 0; i < transversals; i++)
+	  strncat (fullurl, local_url, strlen (local_url));
+	
+	  for (i = 0; i < local_transversals; i++)
 	    {
 
 	      if (tmpindex[i] > -1)
@@ -229,23 +229,28 @@ run_thread (void *threadarg)
 		    }
 		}
 	    }
+	//	printf ("%d : check positive (%s)\n", taskid, fullurl);
+	usleep(300);
 
-	  if (strlen (fullurl) > strlen (url))
+	  if (strlen (fullurl) > strlen (local_url))
 	    {
+	
+	        pthread_mutex_lock (&mutexsum1);				// LOCK A
+	      		msg = openhttp (fullurl);
+	        pthread_mutex_unlock (&mutexsum1);				// UNLOCK A
 
-	      pthread_mutex_lock (&mutexsum);
-	      msg = openhttp (fullurl);
 		if(msg==0) pthread_exit ((void *) threadarg);
-	      pthread_mutex_unlock (&mutexsum);
 
-	if(positive!=NULL) {
+		if(local_positive!=NULL) {
 	      if (strstr (msg, local_positive) == NULL
-		  && strstr (msg, "404") == NULL)
+		  && strstr (msg, "404") == NULL) 
 		printf ("%d : positive (%s)\n", taskid, fullurl);
 	}
 	else{
-		if(strstr (msg, "404") == NULL)
+		if(strstr (msg, "404") == NULL) 
                 printf ("%d : positive (%s)\n", taskid, fullurl);
+
+
 	}
 
 	      free (msg);
@@ -255,7 +260,7 @@ run_thread (void *threadarg)
 
 	}
 
-      if (tmpindex[transversals - 1] > maxcount)
+      if (tmpindex[local_transversals - 1] > local_maxcount)
 	{
 
 	  pthread_exit ((void *) threadarg);
@@ -413,7 +418,7 @@ usage (char *argv[0])
 {
 
   fprintf (stderr,
-	   "Usage for %s :\nAdd word into dictionnary\t-w word\nAdd file into dictionnary\t-f file\nscan\t\t\t\t-u url [-t <number of transversals> -f <false-positive-string>] \n",
+	   "Usage for %s :\nAdd word into dictionnary\t-w word\nAdd file into dictionnary\t-f file\nscan\t\t\t\t-u url [-t <number of transversals> -o <false-positive-string>] \n",
 	   argv[0]);
 
   exit (1);
@@ -622,6 +627,7 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 
 /* readying lock mechanism */
   pthread_mutex_init (&mutexsum, NULL);
+  pthread_mutex_init (&mutexsum1, NULL);
 
 /* creating threads */
   pthread_attr_init (&attr);

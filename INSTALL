@@ -7,6 +7,7 @@
 # 
 # v0.1 - G - Original : 18.03.2013
 # v0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
+# v0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
 #
 # 1. How to install :
 #
