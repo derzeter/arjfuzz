@@ -18,7 +18,6 @@ Scan                            -u url [-t <number of transversals> -o <false-po
                                 -u https://www.testserver.com
                                 -u https://www.testserver.com -t 3
                                 -u https://www.testserver.com -t 3 -o Home
-
 */
 
 #include <stdio.h>
@@ -86,7 +85,7 @@ get_word (int count)
   for (i = 0; i < count; i++)
     {
       bzero (word, 255);
-      fscanf (fp, "%s", word);
+      fscanf (fp, "%254s", word); //overflow security for fscanf
     }
 
   fclose (fp);
@@ -162,7 +161,7 @@ run_thread (void *threadarg)
   CURLcode code;
   int taskid, i, local_maxcount,local_transversals;
   int tmpindex[transversals];
-  char fullurl[255],local_url[255];
+  char fullurl[255],local_url[510];
   char local_positive[255];
   char *msg;
 
@@ -190,6 +189,7 @@ run_thread (void *threadarg)
 	if(positive!=NULL) {
       		strncpy (local_positive, positive, strlen (positive));
 	} 
+
           indext[0]++;
 
 	  pthread_mutex_unlock (&mutexsum); 					// UNLOCK 1
@@ -229,7 +229,7 @@ run_thread (void *threadarg)
 		    }
 		}
 	    }
-	//	printf ("%d : check positive (%s)\n", taskid, fullurl);
+
 	usleep(300);
 
 	  if (strlen (fullurl) > strlen (local_url))
@@ -241,20 +241,19 @@ run_thread (void *threadarg)
 
 		if(msg==0) pthread_exit ((void *) threadarg);
 
-		if(local_positive!=NULL) {
+		if(strlen(local_positive)>0) {
 	      if (strstr (msg, local_positive) == NULL
 		  && strstr (msg, "404") == NULL) 
 		printf ("%d : positive (%s)\n", taskid, fullurl);
 	}
 	else{
+
 		if(strstr (msg, "404") == NULL) 
                 printf ("%d : positive (%s)\n", taskid, fullurl);
-
 
 	}
 
 	      free (msg);
-
 
 	    }
 
