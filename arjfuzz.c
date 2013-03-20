@@ -4,9 +4,11 @@ ARJFUZZ - URL Fuzzer dictionnary based, multiple thread based.
 Uses 10 threads to scan website (NUM_THREADS_MAX)
 Uses 3 transversals (TRANSVERSALS_MAX) - can be set from command line. Recommends one to start with...
 
-v0.1 - G - Original : 18.03.2013
-v0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
-v0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
+v 0.1 - G - Original : 18.03.2013
+v 0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
+v 0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
+V 0.4 - G - fixed 2 issues : word[] overflow + -o argument issue
+v 0.5 - G - added shell usage to arjfuzz + created independant scan function
 
 How to use :
 
@@ -30,6 +32,7 @@ Scan                            -u url [-t <number of transversals> -o <false-po
 #define NUM_THREADS_MAX 10
 #define TRANSVERSALS_MAX 3
 #define DICT "dictionnary/dict.txt"
+#define VERSION "arjfuzz 0.5"
 
 /* name of process */
 char *name;
@@ -43,7 +46,7 @@ int maxcount = 0;
 char *url;
 
 /* positive */
-char *positive=NULL;
+char *positive = NULL;
 
 
 /* threads information data */
@@ -85,7 +88,7 @@ get_word (int count)
   for (i = 0; i < count; i++)
     {
       bzero (word, 255);
-      fscanf (fp, "%254s", word); //overflow security for fscanf
+      fscanf (fp, "%254s", word);	//overflow security for fscanf
     }
 
   fclose (fp);
@@ -134,15 +137,15 @@ openhttp (char *url)
       curl_easy_setopt (curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
       curl_easy_setopt (curl, CURLOPT_WRITEDATA, (void *) &output);
       curl_easy_setopt (curl, CURLOPT_FOLLOWLOCATION, 1L);
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);    
-  /* Perform the request, res will get the return code */
+      curl_easy_setopt (curl, CURLOPT_SSL_VERIFYHOST, 0L);
+      curl_easy_setopt (curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      /* Perform the request, res will get the return code */
       res = curl_easy_perform (curl);
       /* Check for errors */
       if (res != CURLE_OK)
 	fprintf (stderr, "curl_easy_perform() failed: %s\n",
 		 curl_easy_strerror (res));
-	
+
       /* always cleanup */
       curl_easy_cleanup (curl);
 
@@ -159,9 +162,9 @@ void *
 run_thread (void *threadarg)
 {
   CURLcode code;
-  int taskid, i, local_maxcount,local_transversals;
+  int taskid, i, local_maxcount, local_transversals;
   int tmpindex[transversals];
-  char fullurl[255],local_url[510];
+  char fullurl[255], local_url[510];
   char local_positive[255];
   char *msg;
 
@@ -180,25 +183,26 @@ run_thread (void *threadarg)
       bzero (local_positive, 255);
       bzero (local_url, 255);
 
-        pthread_mutex_lock (&mutexsum);						// LOCK 1
-        bzero (local_url, 255);
-	strncpy(local_url,url,strlen(url));
-	local_maxcount = maxcount;
-	local_transversals = transversals;
+      pthread_mutex_lock (&mutexsum);	// LOCK 1
+      bzero (local_url, 255);
+      strncpy (local_url, url, strlen (url));
+      local_maxcount = maxcount;
+      local_transversals = transversals;
 
-	if(positive!=NULL) {
-      		strncpy (local_positive, positive, strlen (positive));
-	} 
+      if (positive != NULL)
+	{
+	  strncpy (local_positive, positive, strlen (positive));
+	}
 
-          indext[0]++;
+      indext[0]++;
 
-	  pthread_mutex_unlock (&mutexsum); 					// UNLOCK 1
+      pthread_mutex_unlock (&mutexsum);	// UNLOCK 1
 
       if (tmpindex[local_transversals - 1] > local_maxcount);
       else
 	{
 
-		pthread_mutex_lock (&mutexsum);					// LOCK 2
+	  pthread_mutex_lock (&mutexsum);	// LOCK 2
 
 	  for (i = 0; i < local_transversals; i++)
 	    {
@@ -208,14 +212,14 @@ run_thread (void *threadarg)
 		    indext[i + 1]++;
 		    indext[i] = 0;
 		  }
-		tmpindex[i] = indext[i];
+	      tmpindex[i] = indext[i];
 	    }
 
-		pthread_mutex_unlock (&mutexsum);				// UNLOCK 2
+	  pthread_mutex_unlock (&mutexsum);	// UNLOCK 2
 
 	  bzero (fullurl, 255);
 	  strncat (fullurl, local_url, strlen (local_url));
-	
+
 	  for (i = 0; i < local_transversals; i++)
 	    {
 
@@ -230,28 +234,31 @@ run_thread (void *threadarg)
 		}
 	    }
 
-	usleep(300);
+	  usleep (300);
 
 	  if (strlen (fullurl) > strlen (local_url))
 	    {
-	
-	        pthread_mutex_lock (&mutexsum1);				// LOCK A
-	      		msg = openhttp (fullurl);
-	        pthread_mutex_unlock (&mutexsum1);				// UNLOCK A
 
-		if(msg==0) pthread_exit ((void *) threadarg);
+	      pthread_mutex_lock (&mutexsum1);	// LOCK A
+	      msg = openhttp (fullurl);
+	      pthread_mutex_unlock (&mutexsum1);	// UNLOCK A
 
-		if(strlen(local_positive)>0) {
-	      if (strstr (msg, local_positive) == NULL
-		  && strstr (msg, "404") == NULL) 
-		printf ("%d : positive (%s)\n", taskid, fullurl);
-	}
-	else{
+	      if (msg == 0)
+		pthread_exit ((void *) threadarg);
 
-		if(strstr (msg, "404") == NULL) 
-                printf ("%d : positive (%s)\n", taskid, fullurl);
+	      if (strlen (local_positive) > 0)
+		{
+		  if (strstr (msg, local_positive) == NULL
+		      && strstr (msg, "404") == NULL)
+		    printf ("<%03d positive (%s)\n", taskid, fullurl);
+		}
+	      else
+		{
 
-	}
+		  if (strstr (msg, "404") == NULL)
+		    printf ("<%03d positive (%s)\n", taskid, fullurl);
+
+		}
 
 	      free (msg);
 
@@ -480,6 +487,185 @@ sanitize_argv (int argc, char **argv)
 
 }
 
+
+/* Scanning this thing */
+
+int
+scan ()
+{
+  pthread_t threads[NUM_THREADS_MAX];
+  pthread_attr_t attr;
+  FILE *fp;
+  char word[255];
+  int i = 0, rc = 0;
+  long t;
+
+/* setting up max count in lines */
+
+  fp = fopen (DICT, "r");
+  if (fp == NULL)
+    {
+      perror (name);
+      exit (1);
+    }
+  maxcount = 0;
+  do
+    {
+
+      bzero (word, 255);
+      fscanf (fp, "%s\n", word);
+/* set max count */
+      if (strlen (word) > 0)
+	{
+	  maxcount++;
+
+	}
+    }
+  while (!feof (fp));
+
+  fclose (fp);
+
+
+/* initializing transversals */
+  for (i = 0; i < transversals; i++)
+    indext[i] = -1;
+
+  printf ("<~#@ Lets start Fuzzing !\n");
+// algorythme for transversals
+
+
+/* readying lock mechanism */
+  pthread_mutex_init (&mutexsum, NULL);
+  pthread_mutex_init (&mutexsum1, NULL);
+
+/* creating threads */
+  pthread_attr_init (&attr);
+  pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
+
+/* running threads */
+
+  for (t = 0; t < NUM_THREADS_MAX; t++)
+    {
+      thread_data_array[t].thread_id = t;
+      thread_data_array[t].message = "";
+
+      rc =
+	pthread_create (&threads[t], NULL, run_thread,
+			(void *) &thread_data_array[t]);
+    }
+
+/* freeing data (cleanup) */
+  pthread_mutex_destroy (&mutexsum);
+  pthread_exit (NULL);
+
+}
+
+
+
+/* the Shell */
+
+int
+shell ()
+{
+
+  char cmd[513];
+  char realcmd[255];
+  char parameter[256];
+  int err;
+
+  printf ("<~#@ ARJFUZZ - welcome to our little shell.\n");
+  printf ("<~#@ Use '?' to know more\n");
+
+  do
+    {
+
+      bzero (cmd, 513);
+      bzero (parameter, 256);
+      printf ("@#~> ");
+      fgets (cmd, 500, stdin);
+
+      if (strncmp (cmd, "scan", 4) == 0)
+	{
+// Launch scan (for hostname)
+	  sscanf (cmd, "%s %255s", &realcmd, &parameter);
+	  url = (char *) malloc (strlen (parameter) + 1);
+	  bzero (url, strlen (parameter) + 1);
+	  strncpy (url, parameter, strlen (parameter));
+
+	  printf ("<~#@ URL set to %s\n", url);
+	  scan ();
+
+	}
+      else if (strncmp (cmd, "usage", 5) == 0 || strncmp (cmd, "?", 1) == 0)
+	{
+// Shell usage information
+	  printf ("<~#@ ARJFUZZ - Usage\n");
+	  printf
+	    ("<~#@ fl filenamet\tto add file of keywords in keyword file.\n");
+	  printf ("<~#@ kw keyword \tto add keyword in keyword file.\n");
+	  printf ("<~#@ pos positive\tto set up false positive string.\n");
+	  printf ("<~#@ scan hostname\tto scan hostname.\n");
+	  printf
+	    ("<~#@ tv transversals\tto set number of transversals to scan.\n");
+	  printf ("<~#@ exit \n");
+	  printf ("<~#@ usage (?) \n");
+	  printf ("<~#@ version \n");
+	}
+      else if (strncmp (cmd, "tv", 2) == 0)
+	{
+// Transversals informations
+	  sscanf (cmd, "%s %d", &realcmd, &transversals);
+	  if (transversals > TRANSVERSALS_MAX)
+	    {
+	      printf
+		("<!!! too many transversals, please change #define TRANSVERSALS_MAX if ou are sure.\n");
+	      transversals = 1;
+	    }
+	  else if (transversals == 0)
+	    transversals = 1;
+	  printf ("<~#@ transversals set to %d\n", transversals);
+	}
+      else if (strncmp (cmd, "kw", 2) == 0)
+	{
+// Add keyword
+	  sscanf (cmd, "%s %255s", &realcmd, &parameter);
+	  err = add_word (parameter);
+	  printf ("<~#@ word added \n");
+	}
+      else if (strncmp (cmd, "fl", 2) == 0)
+	{
+// Add file
+	  sscanf (cmd, "%s %255s", &realcmd, &parameter);
+	  err = add_file (parameter);
+	  printf ("<~#@ file added \n");
+	}
+      else if (strncmp (cmd, "pos", 2) == 0)
+	{
+// Setting up false positive
+	  sscanf (cmd, "%s %255s", &realcmd, &parameter);
+	  positive = (char *) malloc (strlen (parameter) + 2);
+	  bzero (positive, strlen (parameter) + 2);
+	  strncpy (positive, parameter, strlen (parameter));
+	  printf ("<~#@ positive set to %s\n", positive);
+	}
+      else if (strncmp (cmd, "version", 2) == 0)
+	{
+// version please
+	  printf ("<~#@ %s\n", VERSION);
+	}
+
+
+    }
+  while (strncmp (cmd, "exit", 4) != 0);
+
+  printf ("<~#@ Ka Boom !\n");
+
+/* Ka boom */
+  exit (1);
+
+}
+
+
 /* main program */
 int
 main (int argc, char **argv)
@@ -497,16 +683,18 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 */
 
   int rc, i, change = 0;
-  char word[255];
   int err;
-  long t;
-  pthread_t threads[NUM_THREADS_MAX];
-  pthread_attr_t attr;
-  FILE *fp;
   char *msg;
 
+
+/* If no arguments passed - in shell mode */
+  if (argc == 1)
+    shell ();
+
 /* Stay sane */
+  printf ("<~#@ %s\n", VERSION);
   err = sanitize_argv (argc, argv);
+
 /* fill in name */
   name = (char *) malloc (strlen (argv[0]) + 1);
   bzero (name, strlen (argv[0]) + 1);
@@ -549,7 +737,7 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 	  else if (transversals == 0)
 	    usage (&argv[0]);
 
-	  printf ("Transversals number set to %d\n", transversals);
+	  printf ("<~#@ transversals set to %d\n", transversals);
 
 	}
 
@@ -562,8 +750,7 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 	  url = (char *) malloc (strlen (argv[i + 1]) + 1);
 	  bzero (url, strlen (argv[i + 1]) + 1);
 	  strncpy (url, argv[i + 1], strlen (argv[i + 1]));
-
-	  printf ("URL set to %s\n", url);
+	  printf ("<~#@ URL set to %s\n", url);
 
 	}
 
@@ -576,8 +763,7 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 	  positive = (char *) malloc (strlen (argv[i + 1]) + 2);
 	  bzero (positive, strlen (argv[i + 1]) + 2);
 	  strncpy (positive, argv[i + 1], strlen (argv[i + 1]));
-
-	  printf ("Positive set to %s\n", positive);
+	  printf ("<~#@ positive set to %s\n", positive);
 
 	}
       else
@@ -586,67 +772,9 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
     }
 
 
-/* setting up max count in lines */
+/* Let's start scanning ! */
 
-  fp = fopen (DICT, "r");
-  if (fp == NULL)
-    {
-      perror (name);
-      exit (1);
-    }
-  maxcount = 0;
-  do
-    {
-
-      bzero (word, 255);
-      fscanf (fp, "%s\n", word);
-/* set max count */
-      if (strlen (word) > 0)
-	{
-	  maxcount++;
-
-	}
-    }
-  while (!feof (fp));
-
-  fclose (fp);
-
-
-/* initializing transversals */
-  for (i = 0; i < transversals; i++)
-    indext[i] = -1;
-
-// algorythme for transversals
-
-
-
-
-
-/* 
-
-/* readying lock mechanism */
-  pthread_mutex_init (&mutexsum, NULL);
-  pthread_mutex_init (&mutexsum1, NULL);
-
-/* creating threads */
-  pthread_attr_init (&attr);
-  pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_JOINABLE);
-
-/* running threads */
-
-  for (t = 0; t < NUM_THREADS_MAX; t++)
-    {
-      thread_data_array[t].thread_id = t;
-      thread_data_array[t].message = "";
-
-      rc =
-	pthread_create (&threads[t], NULL, run_thread,
-			(void *) &thread_data_array[t]);
-    }
-
-/* freeing data (cleanup) */
-  pthread_mutex_destroy (&mutexsum);
-  pthread_exit (NULL);
+  scan ();
 
 }
 
