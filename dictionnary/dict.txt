@@ -1,3 +1,6 @@
+admin.php
+index.php
+old.php
 images
 imgs
 logs
@@ -69,4 +72,14 @@ css
 bin
 ajax
 old
+svn
+phone
+devel
+sys
+system
+ssl
+cards
+texts
+docs
+doc
 

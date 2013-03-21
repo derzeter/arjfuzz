@@ -9,6 +9,7 @@ v 0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
 v 0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
 V 0.4 - G - fixed 2 issues : word[] overflow + -o argument issue
 v 0.5 - G - added shell usage to arjfuzz + created independant scan function
+v 0.6 - G - Adding logging facilities + shell command log + comment line -O
 
 How to use :
 
@@ -16,10 +17,11 @@ make
 make install
 Add word into dictionnary       -w word
 Add file into dictionnary       -f file
-Scan                            -u url [-t <number of transversals> -o <false-positive-string>]
+Scan                            -u url [-t <number of transversals> -o <false-positive-string> -O <logfile>]
                                 -u https://www.testserver.com
                                 -u https://www.testserver.com -t 3
                                 -u https://www.testserver.com -t 3 -o Home
+                                -u https://www.testserver.com -t 3 -o Home -O /tmp/log.txt
 */
 
 #include <stdio.h>
@@ -27,12 +29,13 @@ Scan                            -u url [-t <number of transversals> -o <false-po
 #include <string.h>
 #include <curl/curl.h>
 #include <pthread.h>
+#include <time.h>
 
 #define DEBUG 1
 #define NUM_THREADS_MAX 10
 #define TRANSVERSALS_MAX 3
 #define DICT "dictionnary/dict.txt"
-#define VERSION "arjfuzz 0.5"
+#define VERSION "arjfuzz 0.6"
 
 /* name of process */
 char *name;
@@ -45,9 +48,11 @@ int maxcount = 0;
 /* url */
 char *url;
 
+/* logfile */
+char *logfile = NULL;
+
 /* positive */
 char *positive = NULL;
-
 
 /* threads information data */
 struct thread_data
@@ -69,6 +74,52 @@ struct thread_data thread_data_array[NUM_THREADS_MAX];
 pthread_mutex_t mutexsum;
 pthread_mutex_t mutexsum1;
 
+/* log into file */
+int
+log_file (char *local_logfile, char *log, char *localurl)
+{
+  time_t raw_time;
+  struct tm *ptr_ts;
+  FILE *fp;
+
+  time (&raw_time);
+  ptr_ts = gmtime (&raw_time);
+
+
+  if (strlen (local_logfile) == 0)
+    {
+      local_logfile = url = (char *) malloc (255);
+      bzero (local_logfile, 255);
+      sprintf (local_logfile, "%s.%d.%02d.%02d.log", localurl,
+	       (1900 + ptr_ts->tm_year), (1 + ptr_ts->tm_mon),
+	       ptr_ts->tm_mday);
+
+    }
+
+  pthread_mutex_lock (&mutexsum1);	// LOCK A
+
+  fp = fopen (local_logfile, "a");
+  if (!fp)
+    {
+      fprintf (stderr, "log_file() failed: cannot open file.\n");
+      return 1;
+    }
+
+  if (strlen (log) > 0)
+    {
+      fprintf (fp, "%d/%02d/%02d %02d:%02d:%02d > ", (1900 + ptr_ts->tm_year),
+	       (1 + ptr_ts->tm_mon), ptr_ts->tm_mday, ptr_ts->tm_hour,
+	       ptr_ts->tm_min, ptr_ts->tm_sec);
+      fputs (log, fp);
+      fprintf (fp, "\n");
+    }
+
+  fclose (fp);
+
+  pthread_mutex_unlock (&mutexsum1);	// UNLOCK A
+
+
+}
 
 /* get word from dictionarry */
 char *
@@ -166,6 +217,8 @@ run_thread (void *threadarg)
   int tmpindex[transversals];
   char fullurl[255], local_url[510];
   char local_positive[255];
+  char log[255];
+  char local_logfile[255];
   char *msg;
 
   struct thread_data *my_data;
@@ -174,6 +227,11 @@ run_thread (void *threadarg)
   my_data = (struct thread_data *) threadarg;
   taskid = my_data->thread_id;
 /* busy work */
+
+
+  bzero (local_logfile, 255);
+  if (logfile != NULL)
+    sprintf (local_logfile, "%s", logfile);
 
   do
     {
@@ -250,13 +308,26 @@ run_thread (void *threadarg)
 		{
 		  if (strstr (msg, local_positive) == NULL
 		      && strstr (msg, "404") == NULL)
-		    printf ("<%03d positive (%s)\n", taskid, fullurl);
+		    {
+
+		      printf ("<%03d positive (%s)\n", taskid, fullurl);
+		      bzero (log, 255);
+		      sprintf (log, "positive (%s)", fullurl);
+		      log_file (local_logfile, log, local_url);
+
+		    }
 		}
 	      else
 		{
 
 		  if (strstr (msg, "404") == NULL)
-		    printf ("<%03d positive (%s)\n", taskid, fullurl);
+		    {
+
+		      printf ("<%03d positive (%s)\n", taskid, fullurl);
+		      sprintf (log, "positive (%s)", fullurl);
+		      log_file (local_logfile, log, local_url);
+
+		    }
 
 		}
 
@@ -479,7 +550,30 @@ sanitize_argv (int argc, char **argv)
 	  if (strlen (argv[6]) > 100)
 	    usage (&argv[0]);
 
+	  if (argc == 7)
+	    return 0;
+	  else
+	    {
+
+
+	      if (argc < 9)
+		usage (&argv[0]);
+
+/* clearing argument 7 */
+	      if (strlen (argv[7]) != 2)
+		usage (&argv[0]);
+
+/* clearing argument 8 */
+	      if (strlen (argv[8]) > 100)
+		usage (&argv[0]);
+
+
+	    }
+
 	}
+
+
+
 
     }
 
@@ -605,11 +699,21 @@ shell ()
 	  printf ("<~#@ kw keyword \tto add keyword in keyword file.\n");
 	  printf ("<~#@ pos positive\tto set up false positive string.\n");
 	  printf ("<~#@ scan hostname\tto scan hostname.\n");
+	  printf ("<~#@ logfile filename\tset up log file path and name..\n");
 	  printf
 	    ("<~#@ tv transversals\tto set number of transversals to scan.\n");
 	  printf ("<~#@ exit \n");
 	  printf ("<~#@ usage (?) \n");
 	  printf ("<~#@ version \n");
+	}
+      else if (strncmp (cmd, "log", 3) == 0)
+	{
+	  // supplying logfile name
+	  sscanf (cmd, "%s %255s", &realcmd, &parameter);
+	  logfile = (char *) malloc (strlen (parameter) + 2);
+	  bzero (logfile, strlen (parameter) + 2);
+	  strncpy (logfile, parameter, strlen (parameter));
+	  printf ("<~#@ log file set to %s\n", logfile);
 	}
       else if (strncmp (cmd, "tv", 2) == 0)
 	{
@@ -675,10 +779,11 @@ main (int argc, char **argv)
 
 Add word into dictionnary 	-w word 
 Add file into dictionnary 	-f file 
-Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
+Scan 				-u url [-t <number of transversals> -o <false-positive-string> -O <logfile>]
 				-u https://www.testserver.com 
 				-u https://www.testserver.com -t 3
 				-u https://www.testserver.com -t 3 -o Home
+				-u https://www.testserver.com -t 3 -o Home -O logfile
 
 */
 
@@ -766,6 +871,15 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
 	  printf ("<~#@ positive set to %s\n", positive);
 
 	}
+      else if (strncmp (argv[i], "-O", 2) == 0)
+	{
+
+	  logfile = (char *) malloc (strlen (argv[i + 1]) + 2);
+	  bzero (logfile, strlen (argv[i + 1]) + 2);
+	  strncpy (logfile, argv[i + 1], strlen (argv[i + 1]));
+	  printf ("<~#@ log file set to %s\n", logfile);
+
+	}
       else
 	usage (&argv[0]);
 
@@ -777,4 +891,3 @@ Scan 				-u url [-t <number of transversals> -o <false-positive-string>]
   scan ();
 
 }
-

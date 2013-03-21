@@ -22,10 +22,11 @@
 #
 # Add word into dictionnary       -w word
 # Add file into dictionnary       -f file
-# Scan                            -u url [-t <number of transversals> -o <false-positive-string>]
+# Scan                            -u url [-t <number of transversals> -o <false-positive-string> -O <logfile>]
 #                                -u https://www.testserver.com
 #                                -u https://www.testserver.com -t 3
 #                                -u https://www.testserver.com -t 3 -o Home
+#                                -u https://www.testserver.com -t 3 -o Home -O /tmp/log.txt
 #
 # You prefer shell ? ./arjfuzz
 #
