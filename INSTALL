@@ -1,3 +1,4 @@
+
 # ARJFUZZ - URL Fuzzer dictionnary based, multiple thread based.
 #
 # Uses 10 threads to scan website (NUM_THREADS_MAX)
