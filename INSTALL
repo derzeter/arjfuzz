@@ -11,6 +11,7 @@
 # v0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
 # v0.4 - G - fixed 2 issues : word[] overflow + -o argument issue
 # v0.5 - G - added shell usage to arjfuzz + created independant scan function
+# v0.7 - G - split scan() function with set_maxcount, and fixe a log file issue with http://
 #
 # 1. How to install :
 #

@@ -9,7 +9,7 @@ v 0.2 - G - fixed 2 segmentation faults -u / -p : 19.03.13
 v 0.3 - G - fixed 1 mutex segfault + changed parameter from -p to -o in usage : 20.03.13
 V 0.4 - G - fixed 2 issues : word[] overflow + -o argument issue
 v 0.5 - G - added shell usage to arjfuzz + created independant scan function
-v 0.6 - G - Adding logging facilities + shell command log + comment line -O
+v 0.7 - G - split scan() function with set_maxcount, and fixe a log file issue with http://
 
 How to use :
 
@@ -74,6 +74,16 @@ struct thread_data thread_data_array[NUM_THREADS_MAX];
 pthread_mutex_t mutexsum;
 pthread_mutex_t mutexsum1;
 
+/* strpos */
+
+int strpos(char *haystack, char *needle)
+{
+   char *p = strstr(haystack, needle);
+   if (p)
+      return p - haystack;
+   return -3;
+}
+
 /* log into file */
 int
 log_file (char *local_logfile, char *log, char *localurl)
@@ -90,9 +100,21 @@ log_file (char *local_logfile, char *log, char *localurl)
     {
       local_logfile = url = (char *) malloc (255);
       bzero (local_logfile, 255);
+
+     if(strstr(localurl,"://")==NULL) {
       sprintf (local_logfile, "%s.%d.%02d.%02d.log", localurl,
 	       (1900 + ptr_ts->tm_year), (1 + ptr_ts->tm_mon),
 	       ptr_ts->tm_mday);
+	}
+	else
+	{
+      sprintf (local_logfile, "%s.%d.%02d.%02d.log", &localurl[strpos(localurl,"://")+3],
+	       (1900 + ptr_ts->tm_year), (1 + ptr_ts->tm_mon),
+	       ptr_ts->tm_mday);
+
+
+
+	}
 
     }
 
@@ -582,17 +604,13 @@ sanitize_argv (int argc, char **argv)
 }
 
 
-/* Scanning this thing */
+/* max count counter */
 
 int
-scan ()
+set_maxcount ()
 {
-  pthread_t threads[NUM_THREADS_MAX];
-  pthread_attr_t attr;
   FILE *fp;
   char word[255];
-  int i = 0, rc = 0;
-  long t;
 
 /* setting up max count in lines */
 
@@ -618,6 +636,22 @@ scan ()
   while (!feof (fp));
 
   fclose (fp);
+
+
+
+}
+
+/* Scanning this thing */
+
+int
+scan ()
+{
+  pthread_t threads[NUM_THREADS_MAX];
+  pthread_attr_t attr;
+  int i = 0, rc = 0;
+  long t;
+
+  set_maxcount ();
 
 
 /* initializing transversals */
