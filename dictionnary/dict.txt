@@ -1,3 +1,5 @@
+test.php
+xml
 admin.php
 index.php
 old.php
@@ -19,6 +21,7 @@ management
 jlogin
 cpanel
 atos
+games
 error
 sql
 myadm
@@ -75,6 +78,7 @@ old
 svn
 phone
 devel
+dev
 sys
 system
 ssl
